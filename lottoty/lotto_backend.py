@@ -153,7 +153,7 @@ def save_current_state():
     with open(f"{DATA_DIR}/current_results.json", "w") as f:
         json.dump(current_spin_results, f)
 
-# Generate a random combination based on the frequency of lucky numbers
+# Fetch the lucky numbers with the highest appearances
 @app.get("/biased_spin/")
 async def biased_spin():
     try:
@@ -202,16 +202,6 @@ def update_global_state(numbers, frequencies, full_frequencies, source):
     }
     save_current_state()
 
-# Get all lucky number frequencies
-@app.get("/lucky_frequencies/")
-async def get_lucky_frequencies():
-    try:
-        if not LUCKY_NUMBERS_POOL:
-            generate_new_lucky_pool()
-        return {num: LUCKY_NUMBERS_FREQUENCIES.get(num, 0) for num in range(1, 46)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get lucky frequencies: {str(e)}")
-
 # Reset recent combinations http://127.0.0.1:8000/reset/?reset_recent=true
 @app.get("/reset/")
 async def reset_data(reset_recent: bool = True):
@@ -223,7 +213,6 @@ async def reset_data(reset_recent: bool = True):
             json.dump([], f)
 
     return {"message": "Data reset successfully"}
-
 
 # Get cached lucky spin or perform new one
 @app.get("/lucky_numbers/")
