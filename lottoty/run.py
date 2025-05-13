@@ -4,6 +4,7 @@ import subprocess
 import random
 import math
 import uvicorn
+import requests
 
 def wait_for_backend(url, timeout=10):
     """Wait for the backend to be ready"""
