@@ -30,7 +30,7 @@ def send_draw_to_backend(drawn_numbers):
 mixer.init()
 try:
     button_press_sound = mixer.Sound("click.ogg")
-    button_click_sound = mixer.Sound("press.ogg")  
+    button_click_sound = mixer.Sound("press.wav")  
 except:
     print("Warning: Could not load sound files")
 
