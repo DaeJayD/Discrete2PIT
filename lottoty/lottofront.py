@@ -97,6 +97,107 @@ except Exception as e:
 
 history = []
 HISTORY_FILE = "lottery_history.json"
+def update_sample_size():
+    try:
+        # Create popup window
+        popup = Toplevel(window)
+        popup.title("Set Sample Size")
+        popup.geometry("300x150")
+        popup.resizable(False, False)
+        popup.config(bg="black")
+        
+        # Try to load GIF background
+        try:
+            gif = Image.open("popup_bg.gif")
+            frames = []
+            for frame in range(gif.n_frames):
+                gif.seek(frame)
+                frames.append(ImageTk.PhotoImage(gif.copy().resize((300, 150), Image.LANCZOS)))
+            
+            bg_label = Label(popup)
+            bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+            
+            def animate(frame_num=0):
+                frame = frames[frame_num % len(frames)]
+                bg_label.config(image=frame)
+                popup.after(100, animate, frame_num + 1)
+            
+            animate()
+            popup.frames = frames
+        except:
+            popup.config(bg="#8B0000")
+
+        Label(popup, 
+              text="Enter Sample Size:",
+              font=("Impact", 12),
+              fg="#FFD700",
+              bg="black").pack(pady=10)
+
+        entry = Entry(popup, 
+                     font=("Courier", 14),
+                     justify=CENTER,
+                     bd=3,
+                     relief=SUNKEN)
+        entry.pack(pady=5)
+        entry.focus_set()
+
+        def submit():
+            try:
+                size = int(entry.get())
+                if size < 1:
+                    messagebox.showerror("Error", "Sample size must be at least 1")
+                    return
+                
+                # Send to backend
+                response = requests.post(
+                    "http://127.0.0.1:8000/config/",
+                    json={"sample_size": size},
+                    timeout=3
+                )
+                
+                if response.status_code == 200:
+                    messagebox.showinfo("Success", f"Sample size updated to {size}")
+                    popup.destroy()
+                else:
+                    messagebox.showerror("Error", f"Backend returned status {response.status_code}")
+            except ValueError:
+                messagebox.showerror("Error", "Please enter a valid number")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to update sample size: {str(e)}")
+
+        Button(popup,
+               text="Submit",
+               command=submit,
+               font=("Impact", 10),
+               fg="#FFD700",
+               bg="#8B0000",
+               bd=3,
+               relief=RAISED).pack(pady=5)
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to create sample size dialog: {str(e)}")
+
+sample_button = Button(
+    window,
+    text="Set Sample Size",
+    command=update_sample_size,
+    font=("Impact", 12),
+    fg="#FFD700",
+    bg="#8B0000",
+    bd=3,
+    relief=RAISED
+)
+sample_button.place(x=100, y=470, width=200, height=40)  # Position below your frequency button
+
+def press_sample():
+    try:
+        button_press_sound.play()
+    except:
+        print("Could not play button sound")
+    update_sample_size()
+
+sample_button.config(command=press_sample)
+
 
 def load_history():
     global history
@@ -380,6 +481,89 @@ def create_slot_lever(parent, click_func):
 # Create the lever by calling the function
 create_slot_lever(window, click)
 
+def create_pull_me_text():
+    try:
+        
+        pull_me_canvas = Canvas(
+            window,
+            width=60,
+            height=180,
+            bg="#b46c6c",
+            highlightthickness=0
+        )
+        pull_me_canvas.place(x=1320, y=425)  
+
+
+        vertical_text = "P U L L  M E"
+        y_position = 20
+        
+        for char in vertical_text:
+            if char != ' ':  
+                
+                pull_me_canvas.create_text(
+                    32, y_position,
+                    text=char,
+                    font=("Impact", 18, "bold"),
+                    fill="#8B0000",
+                    angle=0
+                )
+                # Main text
+                pull_me_canvas.create_text(
+                    30, y_position,
+                    text=char,
+                    font=("Impact", 18, "bold"),
+                    fill="#FFD700",
+                    angle=0
+                )
+            y_position += 22  
+
+
+        arrow = pull_me_canvas.create_line(
+            50, 90,  
+            20, 90,  
+            arrow=LAST, 
+            width=3,
+            fill="#FF0000",
+            arrowshape=(8, 10, 5),  
+            tags="arrow"
+        )
+
+
+        def animate_arrow():
+
+            x1, y1, x2, y2 = pull_me_canvas.coords(arrow)
+            if x2 > 25:  # Extend left
+                pull_me_canvas.coords(arrow, x1, y1, x2-2, y2)
+            else:  # Snap back
+                pull_me_canvas.coords(arrow, x1, y1, 30, y2)
+            
+
+            current_color = pull_me_canvas.itemcget(arrow, "fill")
+            new_color = "#FFD700" if current_color == "#FF0000" else "#FF0000"
+            pull_me_canvas.itemconfig(arrow, fill=new_color)
+            
+            window.after(150, animate_arrow)
+
+        animate_arrow()
+
+        if not hasattr(window, 'canvas_elements'):
+            window.canvas_elements = []
+        window.canvas_elements.append(pull_me_canvas)
+
+    except Exception as e:
+        print(f"Error creating pull me text: {e}")
+        # Fallback
+        pull_me_label = Label(
+            window,
+            text="PULL\nME",
+            font=("Impact", 18, "bold"),
+            fg="#FFD700",
+            bg="#b46c6c"
+        )
+        pull_me_label.place(x=1380, y=425)
+
+
+create_pull_me_text()
 
 def animate_numbers():
     freq_button.config(state=DISABLED)
