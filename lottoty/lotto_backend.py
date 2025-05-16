@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Dict, Optional
 from datetime import datetime
 import json
 import os
@@ -30,10 +30,12 @@ app.add_middleware(
 DATA_DIR = "data"
 RECENT_COMBINATIONS_FILE = "recent_combinations.json"
 LUCKY_NUMBERS_FILE = "lucky_numbers.json"
+CONFIG_FILE = "config.json"
 MAX_RECENT = 10  # Limit for recent draws
 
 # Storage for lucky numbers pool and frequencies
 LUCKY_NUMBERS_POOL = []
+SAMPLE_SIZE = 1000
 LUCKY_NUMBERS_FREQUENCIES = Counter()
 
 # Create the data directory if it doesn't exist
@@ -45,25 +47,39 @@ class Draw(BaseModel):
     draw_date: str = None
 
 
+class ConfigUpdate(BaseModel):
+    sample_size: Optional[int] = None
+
+
 # In-memory data for recent draws and number frequencies
 recent_combinations = []
 number_frequencies = defaultdict(int)
 
 # ------------------------------------------------------
 # Main logic
-# Generate 1000 unique random combinations of 6 numbers from 1 to 45
-def generate_representative_sample(sample_size=1000):
+def generate_representative_sample(sample_size: int):
     sample = set()
+    max_possible = comb(45, 6)  # Total possible 6-number combinations from 1-45
+    
+    # Ensure sample size doesn't exceed maximum possible combinations
+    sample_size = min(sample_size, max_possible)
+    
     while len(sample) < sample_size:
         combo = tuple(sorted(random.sample(range(1, 46), 6)))
         sample.add(combo)
     return list(sample)
-
 # Initialize the lucky numbers pool with random combinations and calculate their frequencies
 def initialize_lucky_numbers():
-    global LUCKY_NUMBERS_POOL, LUCKY_NUMBERS_FREQUENCIES
+    """Initialize or reinitialize the lucky numbers pool"""
+    global LUCKY_NUMBERS_POOL, LUCKY_NUMBERS_FREQUENCIES, SAMPLE_SIZE
     try:
-        LUCKY_NUMBERS_POOL = generate_representative_sample(1000)
+        # Try to load config if exists
+        if os.path.exists(f"{DATA_DIR}/{CONFIG_FILE}"):
+            with open(f"{DATA_DIR}/{CONFIG_FILE}", "r") as f:
+                config = json.load(f)
+                SAMPLE_SIZE = config.get("sample_size", 1000)
+        
+        LUCKY_NUMBERS_POOL = generate_representative_sample(SAMPLE_SIZE)
         flat_numbers = [num for combo in LUCKY_NUMBERS_POOL for num in combo]
         LUCKY_NUMBERS_FREQUENCIES = Counter(flat_numbers)
     except Exception as e:
@@ -73,20 +89,29 @@ def initialize_lucky_numbers():
         raise
 
 # Generate a new pool and save to file
-def generate_new_lucky_pool():
-    global LUCKY_NUMBERS_POOL, LUCKY_NUMBERS_FREQUENCIES
-    print("Generating new lucky numbers pool...")
-    LUCKY_NUMBERS_POOL = generate_representative_sample()
+def generate_new_lucky_pool(sample_size: int = None):
+    """Generate a new pool with customizable sample size"""
+    global LUCKY_NUMBERS_POOL, LUCKY_NUMBERS_FREQUENCIES, SAMPLE_SIZE
+    
+    if sample_size is not None:
+        SAMPLE_SIZE = sample_size
+        # Save the new sample size to config
+        with open(f"{DATA_DIR}/{CONFIG_FILE}", "w") as f:
+            json.dump({"sample_size": SAMPLE_SIZE}, f)
+    
+    print(f"Generating new lucky numbers pool with sample size {SAMPLE_SIZE}...")
+    LUCKY_NUMBERS_POOL = generate_representative_sample(SAMPLE_SIZE)
     flat_numbers = [num for combo in LUCKY_NUMBERS_POOL for num in combo]
     LUCKY_NUMBERS_FREQUENCIES = Counter(flat_numbers)
     save_lucky_numbers()
 
-# Save lucky pool and frequencies to JSON
 def save_lucky_numbers():
+    """Save lucky pool and frequencies to JSON"""
     try:
         data = {
             "pool": [list(combo) for combo in LUCKY_NUMBERS_POOL],
-            "frequencies": dict(LUCKY_NUMBERS_FREQUENCIES)
+            "frequencies": dict(LUCKY_NUMBERS_FREQUENCIES),
+            "sample_size": SAMPLE_SIZE
         }
         with open(f"{DATA_DIR}/{LUCKY_NUMBERS_FILE}", "w") as f:
             json.dump(data, f)
@@ -120,6 +145,29 @@ async def root():
             "generate": "/generate/ (GET) - Generate random numbers",
             "lucky_numbers": "/lucky_numbers/ (GET) - Get lucky numbers based on frequency analysis"
         }
+    }
+
+@app.post("/config/", status_code=200)
+async def update_config(config: ConfigUpdate):
+    """Update configuration including sample size"""
+    if config.sample_size is not None:
+        if config.sample_size < 1:
+            raise HTTPException(status_code=400, detail="Sample size must be at least 1")
+        generate_new_lucky_pool(config.sample_size)
+    return {"message": "Configuration updated successfully", "sample_size": SAMPLE_SIZE}
+
+@app.get("/config/", status_code=200)
+async def get_config():
+    """Get current configuration"""
+    return {"sample_size": SAMPLE_SIZE}
+
+@app.get("/pool_info/", status_code=200)
+async def get_pool_info():
+    """Get information about the current lucky numbers pool"""
+    return {
+        "pool_size": len(LUCKY_NUMBERS_POOL),
+        "sample_size": SAMPLE_SIZE,
+        "number_frequencies": dict(LUCKY_NUMBERS_FREQUENCIES)
     }
 
 # Record a new lottery draw
